@@ -1,17 +1,20 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
-	"github.com/gorilla/mux"
+	"io/ioutil"
 	"log"
 	"net/http"
-	"bytes"
-	"io/ioutil"
+
+	"github.com/gorilla/mux"
 )
 
-const VERIFY_TOKEN = "rubyforever"
-const PAGE_ACCESS_TOKEN = "EAACChyvB7ZCMBAPXK1i9VDFJyPdEEArsMuAuGNFsuCvfe9Sp6LCX21Rkmii580x25GKUVrEYQkx7BDPdOgnibTt9I9jIx4uIgduUbaafmkmiBGn01KxhIU8yKaXjpBQfRZBDhmy2oiP1wsqh0CKgoDZCj6LEGI5mVD3BcZBtBAZDZD"
+const (
+	VERIFY_TOKEN      = "rubyforever"
+	PAGE_ACCESS_TOKEN = "EAACChyvB7ZCMBAPXK1i9VDFJyPdEEArsMuAuGNFsuCvfe9Sp6LCX21Rkmii580x25GKUVrEYQkx7BDPdOgnibTt9I9jIx4uIgduUbaafmkmiBGn01KxhIU8yKaXjpBQfRZBDhmy2oiP1wsqh0CKgoDZCj6LEGI5mVD3BcZBtBAZDZD"
+)
 
 type Participant struct {
 	Id string `json:"id"`
@@ -22,30 +25,30 @@ type Message struct {
 }
 
 type Response struct {
-  Recipient Participant `json:"recipient"`
-  Message Message `json:"message"`
-}
- 
-type Messaging struct {
-	Sender Participant `json:"sender"`
 	Recipient Participant `json:"recipient"`
-	Timestamp int `json:"recipient"`
-	Message Message `json:"message"`
+	Message   Message     `json:"message"`
+}
+
+type Messaging struct {
+	Sender    Participant `json:"sender"`
+	Recipient Participant `json:"recipient"`
+	Timestamp int         `json:"timestamp"`
+	Message   Message     `json:"message"`
 }
 
 type Entry struct {
-	Id string `json:"id"`
-	Time int `json:"time"`
+	Id        string      `json:"id"`
+	Time      int         `json:"time"`
 	Messaging []Messaging `json:"messaging"`
 }
 
 type Answer struct {
-	Object string `json:"object"`
-	Entry []Entry `json:"entry"`	
+	Object string  `json:"object"`
+	Entry  []Entry `json:"entry"`
 }
 
 func main() {
-	var router = mux.NewRouter()
+	router := mux.NewRouter()
 	router.HandleFunc("/webhook", getWebhook).Methods("GET")
 	router.HandleFunc("/webhook", postWebhook).Methods("POST")
 	fmt.Println("Running server!")
@@ -53,30 +56,30 @@ func main() {
 }
 
 func getWebhook(w http.ResponseWriter, r *http.Request) {
-	var mode = r.URL.Query()["hub.mode"][0]
-  var token = r.URL.Query()["hub.verify_token"][0]
-	var challenge = r.URL.Query()["hub.challenge"][0]
-	
+	mode := r.URL.Query()["hub.mode"][0]
+	token := r.URL.Query()["hub.verify_token"][0]
+	challenge := r.URL.Query()["hub.challenge"][0]
+
 	if mode != "" && token != "" {
-    if mode == "subscribe" && token == VERIFY_TOKEN {
+		if mode == "subscribe" && token == VERIFY_TOKEN {
 			w.Write([]byte(challenge))
-    } else {
-      w.Write([]byte("Forbidden"));
-    }
-  }
+		} else {
+			w.Write([]byte("Forbidden"))
+		}
+	}
 }
 
 func send_response(sender_id string, text string) {
-	var res = Response{ Recipient: Participant{ Id: sender_id }, Message: Message{ Text: text } }
+	var res = Response{Recipient: Participant{Id: sender_id}, Message: Message{Text: text}}
 
 	res_marshalled, err := json.Marshal(res)
-	
+
 	if err != nil {
 		fmt.Println(err)
 	}
 
 	url := "https://graph.facebook.com/v2.6/me/messages"
-	
+
 	req, err := http.NewRequest("POST", url, bytes.NewBuffer(res_marshalled))
 	req.Header.Set("Content-Type", "application/json")
 
@@ -87,7 +90,7 @@ func send_response(sender_id string, text string) {
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
-			panic(err)
+		panic(err)
 	}
 	defer resp.Body.Close()
 }
@@ -96,7 +99,6 @@ func postWebhook(w http.ResponseWriter, r *http.Request) {
 	b, err := ioutil.ReadAll(r.Body)
 	defer r.Body.Close()
 	if err != nil {
-
 		http.Error(w, err.Error(), 500)
 		return
 	}
@@ -107,12 +109,12 @@ func postWebhook(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), 500)
 		return
 	}
-	
+
 	if answer.Object == "page" {
-		var event = answer.Entry[0].Messaging[0];
-		var sender_id = event.Sender.Id
-	 	var text = event.Message.Text	
+		event := answer.Entry[0].Messaging[0]
+		sender_id := event.Sender.Id
+		text := event.Message.Text
 		send_response(sender_id, text)
 	}
-	w.Write([]byte("EVENT_RECEIVED"));
+	w.Write([]byte("EVENT_RECEIVED"))
 }
