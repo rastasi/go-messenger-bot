@@ -7,13 +7,14 @@ import (
 	"log"
 	"net/http"
 	"bytes"
+	"io/ioutil"
 )
 
 const VERIFY_TOKEN = "rubyforever"
 const PAGE_ACCESS_TOKEN = "EAACChyvB7ZCMBAPXK1i9VDFJyPdEEArsMuAuGNFsuCvfe9Sp6LCX21Rkmii580x25GKUVrEYQkx7BDPdOgnibTt9I9jIx4uIgduUbaafmkmiBGn01KxhIU8yKaXjpBQfRZBDhmy2oiP1wsqh0CKgoDZCj6LEGI5mVD3BcZBtBAZDZD"
 
-type Recipient struct {
-	Id int64 `json:"id"`
+type Participant struct {
+	Id string `json:"id"`
 }
 
 type Message struct {
@@ -21,8 +22,26 @@ type Message struct {
 }
 
 type Response struct {
-  Recipient Recipient `json:"recipient"`
+  Recipient Participant `json:"recipient"`
   Message Message `json:"message"`
+}
+ 
+type Messaging struct {
+	Sender Participant `json:"sender"`
+	Recipient Participant `json:"recipient"`
+	Timestamp int `json:"recipient"`
+	Message Message `json:"message"`
+}
+
+type Entry struct {
+	Id string `json:"id"`
+	Time int `json:"time"`
+	Messaging []Messaging `json:"messaging"`
+}
+
+type Answer struct {
+	Object string `json:"object"`
+	Entry []Entry `json:"entry"`	
 }
 
 func main() {
@@ -40,7 +59,6 @@ func getWebhook(w http.ResponseWriter, r *http.Request) {
 	
 	if mode != "" && token != "" {
     if mode == "subscribe" && token == VERIFY_TOKEN {
-      fmt.Println("WEBHOOK_VERIFIED");
 			w.Write([]byte(challenge))
     } else {
       w.Write([]byte("Forbidden"));
@@ -48,16 +66,14 @@ func getWebhook(w http.ResponseWriter, r *http.Request) {
   }
 }
 
-func send_response(sender_id int64, text string) {
-	var res = Response{ Recipient: Recipient{ Id: sender_id }, Message: Message{ Text: text } }
+func send_response(sender_id string, text string) {
+	var res = Response{ Recipient: Participant{ Id: sender_id }, Message: Message{ Text: text } }
 
 	res_marshalled, err := json.Marshal(res)
 	
 	if err != nil {
 		fmt.Println(err)
 	}
-
-	fmt.Println(res_marshalled)
 
 	url := "https://graph.facebook.com/v2.6/me/messages"
 	
@@ -77,10 +93,26 @@ func send_response(sender_id int64, text string) {
 }
 
 func postWebhook(w http.ResponseWriter, r *http.Request) {
-	var sender_id = int64(1589487791148693)
-	var text = string("Message answer")
-	
-	send_response(sender_id, text)
+	b, err := ioutil.ReadAll(r.Body)
+	defer r.Body.Close()
+	if err != nil {
 
+		http.Error(w, err.Error(), 500)
+		return
+	}
+
+	var answer Answer
+	err = json.Unmarshal(b, &answer)
+	if err != nil {
+		http.Error(w, err.Error(), 500)
+		return
+	}
+	
+	if answer.Object == "page" {
+		var event = answer.Entry[0].Messaging[0];
+		var sender_id = event.Sender.Id
+	 	var text = event.Message.Text	
+		send_response(sender_id, text)
+	}
 	w.Write([]byte("EVENT_RECEIVED"));
 }
