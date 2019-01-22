@@ -3,32 +3,42 @@ package main
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
+	"flag"
 	"io/ioutil"
 	"log"
 	"net/http"
 
-	"github.com/gorilla/mux"
+	"github.com/go-chi/chi"
+	"github.com/rastasi/go-messenger-bot/models"
 )
 
 const (
-	verifyToken     = "rubyforever"
+	verifyToken     = "goforever"
 	pageAccessToken = "EAACChyvB7ZCMBAPXK1i9VDFJyPdEEArsMuAuGNFsuCvfe9Sp6LCX21Rkmii580x25GKUVrEYQkx7BDPdOgnibTt9I9jIx4uIgduUbaafmkmiBGn01KxhIU8yKaXjpBQfRZBDhmy2oiP1wsqh0CKgoDZCj6LEGI5mVD3BcZBtBAZDZD"
 	messagesURL     = "https://graph.facebook.com/v2.6/me/messages"
 )
 
+var (
+	address string
+)
+
+func init() {
+	flag.StringVar(&address, "address", ":3000", "")
+	flag.Parse()
+}
+
 func main() {
-	router := mux.NewRouter()
-	router.HandleFunc("/webhook", getWebhook).Methods("GET")
-	router.HandleFunc("/webhook", postWebhook).Methods("POST")
-	fmt.Println("Running server!")
-	log.Fatal(http.ListenAndServe(":3000", router))
+	router := chi.NewRouter()
+	router.Get("/webhook", getWebhook)
+	router.Post("/webhook", postWebhook)
+	log.Printf("Listening on %s", address)
+	log.Fatal(http.ListenAndServe(address, router))
 }
 
 func getWebhook(w http.ResponseWriter, r *http.Request) {
-	mode := r.URL.Query()["hub.mode"][0]
-	token := r.URL.Query()["hub.verify_token"][0]
-	challenge := r.URL.Query()["hub.challenge"][0]
+	mode := r.URL.Query().Get("hub.mode")
+	token := r.URL.Query().Get("hub.verify_token")
+	challenge := r.URL.Query().Get("hub.challenge")
 
 	if mode != "" && token != "" {
 		if mode == "subscribe" && token == verifyToken {
@@ -39,29 +49,27 @@ func getWebhook(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func getJSONResponse(response Response) []byte {
+func getJSONResponse(response models.Response) []byte {
 	jsonResponse, err := json.Marshal(response)
 	if err != nil {
-		fmt.Println(err)
+		log.Print(err)
 	}
 	return jsonResponse
 }
 
 func sendResponse(senderID string, text string) {
-	response := Response{Recipient: Participant{Id: senderID}, Message: Message{Text: text}}
+	response := models.Response{Recipient: models.Participant{Id: senderID}, Message: models.Message{Text: text}}
 	jsonResponse := getJSONResponse(response)
 
 	request, err := http.NewRequest("POST", messagesURL, bytes.NewBuffer(jsonResponse))
 	request.Header.Set("Content-Type", "application/json")
 
-	q := request.URL.Query()
-	q.Add("access_token", pageAccessToken)
-	request.URL.RawQuery = q.Encode()
+	request.URL.Query().Add("access_token", pageAccessToken)
 
 	client := &http.Client{}
 	resp, err := client.Do(request)
 	if err != nil {
-		panic(err)
+		log.Print(err)
 	}
 	defer resp.Body.Close()
 }
@@ -75,8 +83,8 @@ func getBody(w http.ResponseWriter, r *http.Request) []byte {
 	return body
 }
 
-func getAnswer(w http.ResponseWriter, body []byte) Answer {
-	var answer Answer
+func getAnswer(w http.ResponseWriter, body []byte) models.Answer {
+	var answer models.Answer
 	err := json.Unmarshal(body, &answer)
 	if err != nil {
 		http.Error(w, err.Error(), 500)
@@ -85,13 +93,12 @@ func getAnswer(w http.ResponseWriter, body []byte) Answer {
 }
 
 func getResponseText(input string) string {
-	if input == "hello" {
+	switch input {
+	case "hello":
 		return "hello!"
-	}
-	if input == "help" {
+	case "help":
 		return "Can I help you?"
-	}
-	if input == "contact" {
+	case "contact":
 		return "www.aiventure.me"
 	}
 	return "Sorry, I don't undersand."
