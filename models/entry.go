@@ -1,4 +1,6 @@
-package main
+package models
+
+import "encoding/json"
 
 type Participant struct {
 	Id string `json:"id"`
@@ -29,4 +31,8 @@ type Entry struct {
 type Answer struct {
 	Object string  `json:"object"`
 	Entry  []Entry `json:"entry"`
+}
+
+func (a *Answer) JSON() ([]byte, error) {
+	return json.Marshal(a)
 }
